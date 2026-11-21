@@ -1,0 +1,1944 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ETF 시그널 &amp; 리밸런싱 대시보드 | AI Quant Lab</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+      background-color: #090e1a;
+      color: #e2e8f0;
+    }
+    .glass-card {
+      background: linear-gradient(180deg, rgba(17, 25, 43, 0.92) 0%, rgba(13, 19, 34, 0.96) 100%);
+      border: 1px solid rgba(148, 163, 184, 0.14);
+    }
+    .tab-btn[aria-selected="true"] {
+      background: rgba(56, 189, 248, 0.14);
+      color: #38bdf8;
+      border-color: rgba(56, 189, 248, 0.35);
+    }
+    .pill-btn[data-active="true"] {
+      background: #0284c7;
+      color: #ffffff;
+      border-color: #38bdf8;
+    }
+    .num {
+      font-variant-numeric: tabular-nums;
+    }
+    /* Custom subtle range slider */
+    input[type="range"] {
+      accent-color: #38bdf8;
+    }
+    /* Prevent horizontal overflow */
+    html, body {
+      overflow-x: hidden;
+    }
+  </style>
+</head>
+<body class="min-h-screen antialiased selection:bg-sky-500/30 selection:text-sky-200">
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- Header -->
+  <header class="sticky top-0 z-30 border-b border-slate-800/80 bg-[#090e1a]/90 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-900/30 shrink-0">
+          <i data-lucide="activity" class="w-5 h-5 text-white"></i>
+        </div>
+        <div class="min-w-0">
+          <h1 class="text-base sm:text-lg font-bold tracking-tight text-white truncate">ETF 시그널 &amp; 리밸런싱 대시보드</h1>
+          <p class="text-xs text-slate-400 truncate" id="data-timestamp">미국 장 마감 기준 · 2026-11-20 (Google Finance 실데이터)</p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <button id="btn-sync-remote" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 transition">
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+          <span id="sync-btn-label">시세 새로고침</span>
+        </button>
+        <button id="btn-export-json" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+          <i data-lucide="download" class="w-3.5 h-3.5"></i>
+          <span>설정 내보내기</span>
+        </button>
+        <button id="btn-goto-rules" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 transition">
+          <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i>
+          <span>규칙 설정</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 pb-2.5">
+      <nav class="flex items-center gap-1.5 overflow-x-auto no-scrollbar" role="tablist" aria-label="대시보드 메뉴">
+        <button type="button" role="tab" aria-selected="true" data-tab="overview" class="tab-btn inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium text-slate-300 border border-transparent hover:bg-slate-800/70 transition whitespace-nowrap">
+          <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+          <span>시그널 오버뷰</span>
+        </button>
+        <button type="button" role="tab" aria-selected="false" data-tab="charts" class="tab-btn inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium text-slate-300 border border-transparent hover:bg-slate-800/70 transition whitespace-nowrap">
+          <i data-lucide="line-chart" class="w-4 h-4"></i>
+          <span>차트 &amp; 지표 분석</span>
+        </button>
+        <button type="button" role="tab" aria-selected="false" data-tab="rebalance" class="tab-btn inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium text-slate-300 border border-transparent hover:bg-slate-800/70 transition whitespace-nowrap">
+          <i data-lucide="scale" class="w-4 h-4"></i>
+          <span>리밸런싱 계산기</span>
+        </button>
+        <button type="button" role="tab" aria-selected="false" data-tab="rules" class="tab-btn inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium text-slate-300 border border-transparent hover:bg-slate-800/70 transition whitespace-nowrap">
+          <i data-lucide="bell-ring" class="w-4 h-4"></i>
+          <span>알림 규칙 &amp; 연동</span>
+          <span id="nav-alert-badge" class="ml-0.5 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 num">0</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-5 space-y-5">
+
+    <!-- ==================== TAB 1: OVERVIEW ==================== -->
+    <section id="tab-overview" class="space-y-5">
+      <!-- KPI Strip -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div class="glass-card rounded-2xl p-4">
+          <div class="flex items-center justify-between text-xs text-slate-400 mb-1.5">
+            <span>포트폴리오 평가액</span>
+            <i data-lucide="wallet" class="w-4 h-4 text-sky-400"></i>
+          </div>
+          <div id="kpi-total-equity" class="text-xl sm:text-2xl font-bold text-white num">$0</div>
+          <div id="kpi-total-sub" class="text-xs text-slate-400 mt-1 num">추가 투자금 포함 $0</div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-4">
+          <div class="flex items-center justify-between text-xs text-slate-400 mb-1.5">
+            <span>활성 시그널</span>
+            <i data-lucide="zap" class="w-4 h-4 text-emerald-400"></i>
+          </div>
+          <div id="kpi-signal-count" class="text-xl sm:text-2xl font-bold text-emerald-400 num">0건</div>
+          <div id="kpi-signal-sub" class="text-xs text-slate-400 mt-1">과매도 · MDD 경보 기준</div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-4">
+          <div class="flex items-center justify-between text-xs text-slate-400 mb-1.5">
+            <span>평균 14-기간 RSI</span>
+            <i data-lucide="gauge" class="w-4 h-4 text-amber-400"></i>
+          </div>
+          <div id="kpi-avg-rsi" class="text-xl sm:text-2xl font-bold text-white num">0.0</div>
+          <div id="kpi-rsi-sub" class="text-xs text-slate-400 mt-1">5개 ETF 산술 평균</div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-4">
+          <div class="flex items-center justify-between text-xs text-slate-400 mb-1.5">
+            <span>목표 비중 최대 괴리</span>
+            <i data-lucide="target" class="w-4 h-4 text-rose-400"></i>
+          </div>
+          <div id="kpi-max-drift" class="text-xl sm:text-2xl font-bold text-white num">0.0%p</div>
+          <div id="kpi-drift-sub" class="text-xs text-slate-400 mt-1">리밸런싱 필요 종목</div>
+        </div>
+      </div>
+
+      <!-- Filter & Signal Table Card -->
+      <div class="glass-card rounded-2xl overflow-hidden">
+        <div class="p-4 sm:p-5 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 class="text-base font-semibold text-white">ETF 퀀트 시그널 보드</h2>
+            <p class="text-xs text-slate-400 mt-0.5">종목을 클릭하면 차트 &amp; 일일 브리핑으로 바로 이동합니다.</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-1.5" id="overview-filters">
+            <button type="button" data-filter="all" data-active="true" class="pill-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-700 bg-slate-800/80 text-slate-300 transition">전체 (8)</button>
+            <button type="button" data-filter="core" data-active="false" class="pill-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-700 bg-slate-800/80 text-slate-300 transition">코어 자산배분</button>
+            <button type="button" data-filter="oversold" data-active="false" class="pill-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-700 bg-slate-800/80 text-slate-300 transition">과매도 관심</button>
+            <button type="button" data-filter="mdd" data-active="false" class="pill-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-700 bg-slate-800/80 text-slate-300 transition">MDD 경보</button>
+            <button type="button" data-filter="leveraged" data-active="false" class="pill-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-700 bg-slate-800/80 text-slate-300 transition">레버리지 (2x/3x)</button>
+          </div>
+        </div>
+
+        <!-- Desktop Table -->
+        <div class="hidden md:block overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="border-b border-slate-800/80 text-[11px] uppercase tracking-wider text-slate-400 bg-slate-900/40">
+                <th class="py-3 px-4 font-semibold">종목</th>
+                <th class="py-3 px-4 font-semibold text-right">현재가</th>
+                <th class="py-3 px-4 font-semibold text-right">전일 대비</th>
+                <th class="py-3 px-4 font-semibold text-right">MA20 괴리율</th>
+                <th class="py-3 px-4 font-semibold text-right">RSI (14)</th>
+                <th class="py-3 px-4 font-semibold text-right">52주 고점 대비</th>
+                <th class="py-3 px-4 font-semibold text-right">기간 MDD</th>
+                <th class="py-3 px-4 font-semibold text-center">시그널</th>
+              </tr>
+            </thead>
+            <tbody id="overview-table-body" class="divide-y divide-slate-800/60 text-sm"></tbody>
+          </table>
+        </div>
+
+        <!-- Mobile Cards -->
+        <div id="overview-mobile-cards" class="md:hidden divide-y divide-slate-800/70"></div>
+      </div>
+
+      <!-- Quick Market Briefing & Mini Comparison -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="glass-card rounded-2xl p-4 sm:p-5 lg:col-span-2">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h3 class="text-sm font-semibold text-white">코어 + 위성 ETF 기간 수익률 추이 (2026-05-01 = 0%)</h3>
+              <p class="text-xs text-slate-400">기준일 대비 누적 변동률(%) 비교</p>
+            </div>
+            <span class="text-[11px] px-2 py-1 rounded-md bg-slate-800 text-slate-300 border border-slate-700">6개월+ 실데이터</span>
+          </div>
+          <div class="relative h-72">
+            <canvas id="overview-compare-chart"></canvas>
+          </div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-4 sm:p-5 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center gap-2 mb-3">
+              <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+              <h3 class="text-sm font-semibold text-white">AI 퀀트 요약 브리핑</h3>
+            </div>
+            <div id="overview-briefing" class="space-y-3 text-xs sm:text-sm text-slate-300 leading-relaxed"></div>
+          </div>
+          <button id="btn-open-rebalancer" type="button" class="mt-4 w-full py-2.5 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs sm:text-sm transition flex items-center justify-center gap-1.5">
+            <span>리밸런싱 주문 계산하기</span>
+            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 2: CHART LAB ==================== -->
+    <section id="tab-charts" class="hidden space-y-5">
+      <!-- Ticker & Controls Bar -->
+      <div class="glass-card rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-1.5" id="chart-ticker-selector"></div>
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="flex items-center gap-1 bg-slate-900/80 p-1 rounded-lg border border-slate-800" id="chart-range-selector">
+            <button type="button" data-range="22" data-active="false" class="pill-btn px-2.5 py-1 rounded-md text-xs font-medium border border-transparent text-slate-300 transition">1M</button>
+            <button type="button" data-range="60" data-active="false" class="pill-btn px-2.5 py-1 rounded-md text-xs font-medium border border-transparent text-slate-300 transition">3M</button>
+            <button type="button" data-range="all" data-active="true" class="pill-btn px-2.5 py-1 rounded-md text-xs font-medium border border-transparent text-slate-300 transition">전체</button>
+          </div>
+          <div class="flex items-center gap-1.5 text-xs">
+            <label class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 cursor-pointer select-none">
+              <input type="checkbox" id="toggle-sma10" class="rounded border-slate-600 bg-slate-800 text-amber-400" checked />
+              <span class="text-amber-300 font-medium">SMA10</span>
+            </label>
+            <label class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 cursor-pointer select-none">
+              <input type="checkbox" id="toggle-sma20" class="rounded border-slate-600 bg-slate-800 text-sky-400" checked />
+              <span class="text-sky-300 font-medium">SMA20</span>
+            </label>
+            <label class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 cursor-pointer select-none">
+              <input type="checkbox" id="toggle-sma50" class="rounded border-slate-600 bg-slate-800 text-purple-400" />
+              <span class="text-purple-300 font-medium">SMA50</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Selected Ticker Header Stats -->
+      <div id="chart-ticker-stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"></div>
+
+      <!-- Main Price Chart -->
+      <div class="glass-card rounded-2xl p-4 sm:p-5">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <div>
+            <h2 id="main-chart-title" class="text-base font-semibold text-white">QLD 종가 &amp; 이동평균선</h2>
+            <p id="main-chart-subtitle" class="text-xs text-slate-400">ProShares Ultra QQQ (NYSEARCA · 2x)</p>
+          </div>
+          <div id="main-chart-signal-badge"></div>
+        </div>
+        <div class="relative h-72">
+          <canvas id="detail-price-chart"></canvas>
+        </div>
+      </div>
+
+      <!-- Sub Chart (RSI / Drawdown) + Briefing -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="glass-card rounded-2xl p-4 sm:p-5 lg:col-span-2">
+          <div class="flex items-center justify-between gap-2 mb-3">
+            <h3 id="sub-chart-title" class="text-sm font-semibold text-white">14-기간 RSI 추이</h3>
+            <div class="flex items-center gap-1 bg-slate-900/80 p-1 rounded-lg border border-slate-800" id="sub-chart-mode">
+              <button type="button" data-mode="rsi" data-active="true" class="pill-btn px-2.5 py-1 rounded-md text-xs font-medium border border-transparent text-slate-300 transition">RSI (14)</button>
+              <button type="button" data-mode="drawdown" data-active="false" class="pill-btn px-2.5 py-1 rounded-md text-xs font-medium border border-transparent text-slate-300 transition">낙폭 (MDD %)</button>
+            </div>
+          </div>
+          <div class="relative h-56">
+            <canvas id="detail-sub-chart"></canvas>
+          </div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-4 sm:p-5">
+          <div class="flex items-center gap-2 mb-3">
+            <i data-lucide="sparkles" class="w-4 h-4 text-sky-400"></i>
+            <h3 class="text-sm font-semibold text-white">종목별 퀀트 진단</h3>
+          </div>
+          <div id="detail-briefing" class="space-y-3 text-xs sm:text-sm text-slate-300 leading-relaxed"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 3: REBALANCER ==================== -->
+    <section id="tab-rebalance" class="hidden space-y-5">
+      <!-- Top Controls -->
+      <div class="glass-card rounded-2xl p-4 sm:p-5 flex flex-wrap items-end justify-between gap-4">
+        <div class="space-y-1.5">
+          <label for="input-extra-cash" class="block text-xs font-medium text-slate-300">추가 투자금 (USD)</label>
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+            <input id="input-extra-cash" type="number" min="0" step="100" value="2000" class="w-44 pl-7 pr-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm font-semibold num focus:outline-none focus:border-sky-400" />
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs text-slate-400 mr-1">목표 비중 프리셋:</span>
+          <button type="button" data-preset="core" class="preset-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">코어 70 / 위성 30</button>
+          <button type="button" data-preset="income" class="preset-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">배당·커버드콜 중심</button>
+          <button type="button" data-preset="equal" class="preset-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">균등 12.5%</button>
+          <button type="button" id="btn-reset-portfolio" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800 transition">샘플 복원</button>
+        </div>
+      </div>
+
+      <!-- Allocation Warning Banner -->
+      <div id="target-sum-warning" class="hidden rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs sm:text-sm text-amber-200 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-400 shrink-0"></i>
+          <span id="target-sum-warning-text">목표 비중 합계가 100%가 아닙니다.</span>
+        </div>
+        <button id="btn-normalize-targets" type="button" class="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-medium text-xs whitespace-nowrap transition">100%로 자동 맞춤</button>
+      </div>
+
+      <!-- Rebalancing Table + Chart -->
+      <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <div class="glass-card rounded-2xl overflow-hidden xl:col-span-2">
+          <div class="p-4 sm:p-5 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 class="text-base font-semibold text-white">포트폴리오 리밸런싱 주문표</h2>
+              <p class="text-xs text-slate-400 mt-0.5">초기 보유 수량은 편집 가능한 샘플입니다. 수량·목표 비중을 바꾸면 즉시 재계산됩니다.</p>
+            </div>
+            <div class="text-right">
+              <div class="text-xs text-slate-400">목표 합계</div>
+              <div id="rebalance-target-sum" class="text-sm font-bold text-emerald-400 num">100.0%</div>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="border-b border-slate-800/80 text-[11px] uppercase tracking-wider text-slate-400 bg-slate-900/40">
+                  <th class="py-3 px-3 sm:px-4 font-semibold">종목</th>
+                  <th class="py-3 px-3 font-semibold text-right">보유 수량</th>
+                  <th class="py-3 px-3 font-semibold text-right">평가액 (현재%)</th>
+                  <th class="py-3 px-3 font-semibold text-right">목표 비중(%)</th>
+                  <th class="py-3 px-3 font-semibold text-right">괴리</th>
+                  <th class="py-3 px-3 sm:px-4 font-semibold text-right">권장 주문</th>
+                </tr>
+              </thead>
+              <tbody id="rebalance-table-body" class="divide-y divide-slate-800/60 text-xs sm:text-sm"></tbody>
+            </table>
+          </div>
+
+          <div id="rebalance-summary-footer" class="p-4 bg-slate-900/50 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs"></div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-4 sm:p-5 flex flex-col">
+          <h3 class="text-sm font-semibold text-white mb-1">현재 비중 vs 목표 비중</h3>
+          <p class="text-xs text-slate-400 mb-3">리밸런싱 전후 자산 배분 비교 (%)</p>
+          <div class="relative h-72">
+            <canvas id="rebalance-alloc-chart"></canvas>
+          </div>
+          <div id="rebalance-action-chips" class="mt-4 pt-3 border-t border-slate-800/80 space-y-2 text-xs"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 4: RULES & DATA SYNC ==================== -->
+    <section id="tab-rules" class="hidden space-y-5">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- Threshold Sliders -->
+        <div class="glass-card rounded-2xl p-4 sm:p-5 space-y-5">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-base font-semibold text-white">시그널 임계값 설정</h2>
+              <p class="text-xs text-slate-400 mt-0.5">슬라이더를 움직이면 전 화면의 시그널과 알림이 즉시 갱신됩니다.</p>
+            </div>
+            <button id="btn-reset-rules" type="button" class="px-2.5 py-1 rounded-lg text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">기본값</button>
+          </div>
+
+          <div class="space-y-4">
+            <div>
+              <div class="flex justify-between text-xs mb-1.5">
+                <span class="text-slate-300 font-medium">RSI 과매도 (매수 관심) 기준</span>
+                <span id="val-rsi-low" class="font-bold text-emerald-400 num">30 이하</span>
+              </div>
+              <input id="rule-rsi-low" type="range" min="15" max="45" step="1" value="30" class="w-full" />
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs mb-1.5">
+                <span class="text-slate-300 font-medium">RSI 과열 (차익실현 주의) 기준</span>
+                <span id="val-rsi-high" class="font-bold text-rose-400 num">70 이상</span>
+              </div>
+              <input id="rule-rsi-high" type="range" min="55" max="85" step="1" value="70" class="w-full" />
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs mb-1.5">
+                <span class="text-slate-300 font-medium">MA20 괴리율 과매도 하한</span>
+                <span id="val-disp-low" class="font-bold text-emerald-400 num">-10% 이하</span>
+              </div>
+              <input id="rule-disp-low" type="range" min="-30" max="-3" step="1" value="-10" class="w-full" />
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs mb-1.5">
+                <span class="text-slate-300 font-medium">MA20 괴리율 과열 상한</span>
+                <span id="val-disp-high" class="font-bold text-rose-400 num">+10% 이상</span>
+              </div>
+              <input id="rule-disp-high" type="range" min="3" max="30" step="1" value="10" class="w-full" />
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs mb-1.5">
+                <span class="text-slate-300 font-medium">52주 고점 대비 MDD 경보 기준</span>
+                <span id="val-mdd-alert" class="font-bold text-amber-400 num">-20% 이하</span>
+              </div>
+              <input id="rule-mdd-alert" type="range" min="-60" max="-5" step="5" value="-20" class="w-full" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Active Alert Feed -->
+        <div class="glass-card rounded-2xl p-4 sm:p-5 flex flex-col">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h2 class="text-base font-semibold text-white">실시간 시그널 알림 피드</h2>
+              <p class="text-xs text-slate-400 mt-0.5">현재 설정한 규칙에 도달한 종목 목록</p>
+            </div>
+            <span id="feed-alert-count" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30 num">0건</span>
+          </div>
+          <div id="active-alerts-list" class="space-y-2.5 flex-1 overflow-y-auto max-h-80 pr-1"></div>
+        </div>
+      </div>
+
+      <!-- JSON Import / GitHub Actions Integration -->
+      <div class="glass-card rounded-2xl p-4 sm:p-5 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-base font-semibold text-white">Python / GitHub Actions JSON 데이터 연동</h2>
+            <p class="text-xs text-slate-400 mt-0.5">GitHub Pages에 <code class="text-sky-300">index.html</code>로 배포하면 <code class="text-sky-300">./data/etf_signals.json</code>을 자동으로 불러옵니다. 아래 입력창으로 수동 붙여넣기 테스트도 가능합니다.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="btn-copy-schema" type="button" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">샘플 JSON 복사</button>
+            <button id="btn-apply-json" type="button" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-500 hover:bg-sky-400 text-slate-950 transition">JSON 적용하기</button>
+          </div>
+        </div>
+        <textarea id="json-import-input" rows="5" placeholder='{"etfs": [{"symbol": "QLD", "lastPrice": 63.52, "prevClose": 71.26, ...}]} 형식으로 붙여넣거나 "샘플 JSON 복사"로 포맷을 확인하세요.' class="w-full rounded-xl bg-slate-950/80 border border-slate-800 p-3 text-xs font-mono text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-sky-400"></textarea>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // ============================================================
+      // 1. VERIFIED REAL MARKET DATA (Google Finance, 2026-05-01 ~ 2026-11-20)
+      // ============================================================
+      const DATES = [
+        "2026-05-01","2026-05-04","2026-05-06","2026-05-07","2026-05-11","2026-05-12","2026-05-14","2026-05-15","2026-05-19","2026-05-20",
+        "2026-05-21","2026-05-26","2026-05-27","2026-05-29","2026-06-01","2026-06-03","2026-06-04","2026-06-08","2026-06-09","2026-06-10",
+        "2026-06-12","2026-06-15","2026-06-17","2026-06-18","2026-06-23","2026-06-24","2026-06-26","2026-06-29","2026-06-30","2026-07-02",
+        "2026-07-06","2026-07-08","2026-07-09","2026-07-13","2026-07-14","2026-07-16","2026-07-17","2026-07-20","2026-07-22","2026-07-23",
+        "2026-07-27","2026-07-28","2026-07-30","2026-07-31","2026-08-04","2026-08-05","2026-08-06","2026-08-10","2026-08-11","2026-08-13",
+        "2026-08-14","2026-08-18","2026-08-19","2026-08-21","2026-08-24","2026-08-25","2026-08-27","2026-08-28","2026-09-01","2026-09-02",
+        "2026-09-04","2026-09-08","2026-09-10","2026-09-11","2026-09-14","2026-09-16","2026-09-17","2026-09-21","2026-09-22","2026-09-24",
+        "2026-09-25","2026-09-29","2026-09-30","2026-10-01","2026-10-05","2026-10-06","2026-10-08","2026-10-09","2026-10-13","2026-10-14",
+        "2026-10-16","2026-10-19","2026-10-20","2026-10-22","2026-10-23","2026-10-27","2026-10-28","2026-10-30","2026-11-02","2026-11-04",
+        "2026-11-05","2026-11-06","2026-11-10","2026-11-11","2026-11-13","2026-11-16","2026-11-18","2026-11-19","2026-11-20"
+      ];
+
+      const INITIAL_ETFS = [
+        {
+          symbol: "QQQ",
+          name: "Invesco QQQ Trust (나스닥 100)",
+          group: "core",
+          roleLabel: "코어 · 나스닥",
+          leverage: "1x",
+          exchange: "NASDAQ",
+          color: "#a78bfa",
+          lastPrice: 608.45,
+          prevClose: 645.04,
+          open: 638.84,
+          dayHigh: 643.28,
+          dayLow: 606.23,
+          high52w: 762.86,
+          low52w: 555.60,
+          volume: 134753507,
+          prices: [
+            674.15,672.88,695.77,694.94,713.29,707.24,719.79,708.93,701.53,713.15,
+            714.51,730.28,729.45,738.31,742.74,744.21,740.61,716.07,707.83,693.69,
+            721.34,744.00,722.51,740.62,713.65,710.62,706.52,724.08,736.40,712.60,
+            722.82,711.44,723.28,711.74,719.69,705.94,695.33,696.06,705.35,691.96,
+            682.12,675.49,683.55,687.99,723.85,717.30,714.65,720.87,718.45,732.07,
+            731.07,717.51,716.08,713.44,706.32,710.72,721.11,716.43,707.64,709.24,
+            718.96,718.36,708.69,714.88,709.18,704.72,716.92,741.47,747.46,741.10,
+            744.50,737.93,739.77,742.03,756.20,759.66,747.58,751.27,743.57,728.95,
+            709.80,718.36,717.63,704.47,704.40,721.25,725.61,690.49,681.09,691.95,
+            647.05,656.10,674.76,690.38,679.89,661.75,659.51,645.04,608.45
+          ]
+        },
+        {
+          symbol: "SCHD",
+          name: "Schwab US Dividend Equity (배당성장)",
+          group: "core",
+          roleLabel: "코어 · 슈드",
+          leverage: "1x",
+          exchange: "NYSEARCA",
+          color: "#2dd4bf",
+          lastPrice: 33.94,
+          prevClose: 34.20,
+          open: 34.40,
+          dayHigh: 34.705,
+          dayLow: 33.865,
+          high52w: 36.38,
+          low52w: 26.70,
+          volume: 4491453,
+          prices: [
+            31.86,31.52,31.66,31.54,31.75,31.76,31.80,31.72,32.10,32.12,
+            32.25,32.67,32.55,32.50,32.18,32.37,32.59,32.29,32.39,32.26,
+            32.82,32.63,31.93,31.86,32.02,31.72,32.09,31.93,31.71,32.39,
+            32.24,32.34,32.26,32.56,32.20,33.04,32.91,32.75,32.90,32.80,
+            33.43,33.89,33.41,33.47,33.85,33.64,33.70,34.19,34.27,34.43,
+            34.52,34.51,35.09,35.11,35.21,35.11,34.83,34.90,34.81,35.01,
+            34.80,34.41,33.99,34.12,34.34,33.84,33.89,33.72,33.74,33.10,
+            33.21,32.85,32.53,32.66,32.72,32.85,33.15,33.04,33.37,33.71,
+            34.35,34.24,34.69,35.40,35.27,35.12,35.09,35.78,35.90,36.21,
+            35.42,35.17,35.83,36.02,36.12,35.86,34.70,34.20,33.94
+          ]
+        },
+        {
+          symbol: "JEPI",
+          name: "JPMorgan Equity Premium Income (S&P 커버드콜)",
+          group: "core",
+          roleLabel: "코어 · 커버드콜",
+          leverage: "1x",
+          exchange: "NYSEARCA",
+          color: "#60a5fa",
+          lastPrice: 54.25,
+          prevClose: 55.54,
+          open: 55.46,
+          dayHigh: 55.80,
+          dayLow: 54.03,
+          high52w: 59.90,
+          low52w: 54.03,
+          volume: 1059941,
+          prices: [
+            56.82,56.67,56.48,56.28,55.85,56.08,55.99,55.89,56.08,56.18,
+            56.08,56.22,56.28,56.04,55.32,55.41,55.71,55.35,55.80,55.29,
+            56.04,56.37,55.99,56.10,55.83,56.06,56.16,56.44,56.48,56.71,
+            56.75,56.52,56.63,56.76,56.58,56.98,56.55,56.39,56.65,56.42,
+            57.09,57.48,57.24,57.43,57.35,57.51,57.59,57.64,57.79,57.92,
+            58.02,57.83,57.96,57.92,58.09,58.14,57.85,57.79,57.00,57.19,
+            57.22,56.87,56.26,56.65,56.51,55.93,56.23,56.65,56.74,56.53,
+            56.76,56.49,56.22,55.93,56.29,56.54,56.67,56.77,56.93,56.87,
+            57.04,57.06,57.36,57.29,56.85,57.23,57.45,57.56,57.39,58.29,
+            56.39,56.43,57.66,58.21,57.96,57.19,56.58,55.54,54.25
+          ]
+        },
+        {
+          symbol: "JEPQ",
+          name: "JPMorgan Nasdaq Equity Premium (나스닥 커버드콜)",
+          group: "core",
+          roleLabel: "코어 · 커버드콜",
+          leverage: "1x",
+          exchange: "NASDAQ",
+          color: "#818cf8",
+          lastPrice: 50.84,
+          prevClose: 53.63,
+          open: 53.145,
+          dayHigh: 53.50,
+          dayLow: 50.525,
+          high52w: 61.72,
+          low52w: 50.525,
+          volume: 16589311,
+          prices: [
+            58.86,58.83,59.40,59.38,59.72,59.66,60.01,59.77,59.60,59.98,
+            60.11,60.60,60.76,61.15,60.70,60.80,60.73,59.63,59.08,57.99,
+            59.86,61.18,60.37,61.34,59.86,59.69,59.42,60.70,61.46,59.39,
+            60.16,59.45,60.24,59.59,60.19,59.26,58.51,58.59,59.46,58.53,
+            57.74,57.20,57.92,58.25,59.56,59.38,59.34,59.68,59.65,60.42,
+            60.53,59.93,59.87,59.84,59.42,59.75,60.31,60.15,59.00,59.15,
+            59.87,59.85,59.30,59.78,59.35,59.09,59.95,61.01,61.17,61.11,
+            61.24,61.18,61.26,60.81,61.19,61.25,60.93,61.09,60.92,60.09,
+            58.81,59.50,59.44,58.42,58.43,59.70,60.06,57.58,56.24,57.11,
+            53.71,54.34,55.82,56.93,56.19,54.86,54.68,53.63,50.84
+          ]
+        },
+        {
+          symbol: "SMH",
+          name: "VanEck Semiconductor ETF",
+          group: "satellite",
+          roleLabel: "위성 · 반도체",
+          leverage: "1x",
+          exchange: "NASDAQ",
+          color: "#10b981",
+          lastPrice: 400.06,
+          prevClose: 447.48,
+          open: 438.10,
+          dayHigh: 438.44,
+          dayLow: 396.85,
+          high52w: 671.83,
+          low52w: 315.05,
+          volume: 23492955,
+          prices: [
+            509.82,506.79,549.76,540.10,576.31,561.25,578.34,556.34,543.96,564.66,
+            567.88,602.14,595.50,598.93,607.81,637.90,627.53,598.16,591.01,570.91,
+            619.96,647.10,623.97,659.88,622.05,618.92,611.61,631.98,655.89,592.29,
+            604.30,593.00,607.73,585.62,600.31,568.92,556.53,558.83,586.91,580.17,
+            548.55,529.60,538.90,540.53,575.71,569.70,571.48,569.41,572.93,589.12,
+            587.82,569.77,560.92,560.42,546.80,555.82,573.00,553.11,545.22,550.48,
+            567.01,573.73,560.28,568.53,541.50,545.56,560.61,596.03,607.46,600.52,
+            606.56,606.90,609.00,617.81,633.90,632.50,607.27,603.33,588.12,564.74,
+            539.79,548.46,546.36,523.35,527.20,557.98,567.67,522.49,508.31,504.27,
+            447.73,463.96,483.63,506.96,486.75,461.90,459.54,447.48,400.06
+          ]
+        },
+        {
+          symbol: "QLD",
+          name: "ProShares Ultra QQQ",
+          group: "satellite",
+          roleLabel: "위성 · 레버리지",
+          leverage: "2x",
+          exchange: "NYSEARCA",
+          color: "#38bdf8",
+          lastPrice: 63.52,
+          prevClose: 71.26,
+          open: 69.85,
+          dayHigh: 70.77,
+          dayLow: 62.66,
+          high52w: 101.62,
+          low52w: 56.595,
+          volume: 5648953,
+          prices: [
+            82.60,82.28,87.85,87.66,92.26,90.69,93.90,91.03,89.13,92.05,
+            92.38,96.40,96.19,98.46,99.63,100.00,99.02,92.25,90.12,86.51,
+            93.38,99.18,93.56,97.91,91.22,90.37,89.12,93.68,96.76,90.61,
+            93.14,90.14,93.14,90.13,92.13,88.57,85.91,86.03,88.28,85.00,
+            82.48,80.87,82.68,83.67,92.46,90.80,90.13,91.63,90.98,94.43,
+            94.15,90.65,90.25,89.53,87.72,88.80,91.38,90.17,87.92,88.31,
+            90.68,90.53,88.02,89.55,88.10,86.96,89.94,96.27,97.82,96.10,
+            96.95,95.22,95.65,96.24,99.84,100.77,97.54,98.42,96.44,92.55,
+            87.72,89.79,89.54,86.26,86.15,90.29,91.39,82.59,80.30,82.81,
+            72.27,74.11,78.20,81.83,79.30,75.08,74.51,71.26,63.52
+          ]
+        },
+        {
+          symbol: "USD",
+          name: "ProShares Ultra Semiconductors",
+          group: "satellite",
+          roleLabel: "위성 · 레버리지",
+          leverage: "2x",
+          exchange: "NYSEARCA",
+          color: "#f59e0b",
+          lastPrice: 35.01,
+          prevClose: 46.51,
+          open: 44.71,
+          dayHigh: 44.71,
+          dayLow: 34.35,
+          high52w: 116.50,
+          low52w: 34.35,
+          volume: 1215919,
+          prices: [
+            78.15,77.66,88.65,87.29,99.03,96.11,104.46,95.63,91.23,95.93,
+            95.15,101.38,99.81,102.12,108.37,112.24,106.64,95.25,93.83,86.76,
+            98.01,106.83,99.11,108.71,96.85,96.10,92.56,98.04,104.26,87.51,
+            90.36,90.55,94.05,89.20,94.89,85.50,82.26,83.24,92.55,90.94,
+            80.19,75.84,77.57,78.69,89.77,90.62,90.54,89.08,89.29,95.32,
+            94.16,88.36,84.86,84.47,79.41,82.04,88.82,82.82,81.79,84.17,
+            88.80,89.70,84.91,86.06,78.43,79.71,84.61,94.80,97.63,94.58,
+            95.52,95.55,96.28,97.76,102.97,103.77,96.03,94.84,91.26,84.57,
+            76.96,79.40,78.85,72.91,73.21,80.71,82.59,69.87,66.02,65.28,
+            50.27,53.83,54.66,59.99,54.89,49.68,49.46,46.51,35.01
+          ]
+        },
+        {
+          symbol: "SOXL",
+          name: "Direxion Daily Semiconductor Bull 3X",
+          group: "satellite",
+          roleLabel: "위성 · 레버리지",
+          leverage: "3x",
+          exchange: "NYSEARCA",
+          color: "#f43f5e",
+          lastPrice: 30.88,
+          prevClose: 45.30,
+          open: 42.57,
+          dayHigh: 42.57,
+          dayLow: 29.82,
+          high52w: 302.00,
+          low52w: 28.12,
+          volume: 139426552,
+          prices: [
+            130.40,127.55,165.85,152.10,190.42,172.52,186.19,164.18,151.89,173.20,
+            178.39,225.79,217.98,224.34,227.03,280.54,262.70,211.44,201.68,180.65,
+            234.68,272.50,233.86,279.29,231.42,229.57,215.60,236.52,266.71,181.47,
+            194.65,174.82,192.45,165.37,176.66,142.48,135.47,136.81,160.99,157.50,
+            128.15,109.54,114.72,114.72,139.90,132.07,132.33,130.00,133.00,145.36,
+            144.95,129.10,120.74,120.60,111.16,115.67,123.05,111.34,105.91,106.35,
+            117.28,123.27,115.76,121.82,101.13,103.97,114.82,141.93,151.95,146.33,
+            151.45,147.00,147.86,153.69,164.27,164.26,142.52,139.76,127.57,110.54,
+            93.67,98.65,97.55,82.11,83.56,101.08,107.35,77.05,68.17,66.68,
+            40.87,45.97,56.06,66.03,58.32,48.76,49.26,45.30,30.88
+          ]
+        }
+      ];
+
+      const DEFAULT_PORTFOLIO = {
+        cash: 2000,
+        holdings: {
+          QQQ:  { shares: 5,  target: 20 },
+          SCHD: { shares: 90, target: 20 },
+          JEPI: { shares: 40, target: 15 },
+          JEPQ: { shares: 40, target: 15 },
+          SMH:  { shares: 4,  target: 10 },
+          QLD:  { shares: 20, target: 10 },
+          USD:  { shares: 20, target: 5  },
+          SOXL: { shares: 20, target: 5  }
+        }
+      };
+
+      const DEFAULT_RULES = {
+        rsiLow: 30,
+        rsiHigh: 70,
+        dispLow: -10,
+        dispHigh: 10,
+        mddAlert: -20
+      };
+
+      // ============================================================
+      // 2. STATE MANAGEMENT
+      // ============================================================
+      const STORAGE_KEY = 'ai_quant_lab_etf_dashboard_v2';
+
+      const state = {
+        dates: DATES.slice(),
+        etfs: JSON.parse(JSON.stringify(INITIAL_ETFS)),
+        portfolio: JSON.parse(JSON.stringify(DEFAULT_PORTFOLIO)),
+        rules: Object.assign({}, DEFAULT_RULES),
+        activeTab: 'overview',
+        overviewFilter: 'all',
+        selectedSymbol: 'QQQ',
+        chartRange: 'all',
+        subChartMode: 'rsi',
+        overlays: { sma10: true, sma20: true, sma50: false }
+      };
+
+      function loadSavedState() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return;
+          const parsed = JSON.parse(raw);
+          if (parsed.portfolio && parsed.portfolio.holdings) {
+            state.portfolio = parsed.portfolio;
+          }
+          if (parsed.rules) {
+            state.rules = Object.assign({}, DEFAULT_RULES, parsed.rules);
+          }
+        } catch (e) {
+          // Ignore storage restrictions
+        }
+      }
+
+      function saveState() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            portfolio: state.portfolio,
+            rules: state.rules
+          }));
+        } catch (e) {
+          // Ignore storage restrictions
+        }
+      }
+
+      // ============================================================
+      // 3. QUANT METRICS ENGINE
+      // ============================================================
+      function computeSMASeries(prices, period) {
+        return prices.map((_, idx) => {
+          const start = Math.max(0, idx - period + 1);
+          const slice = prices.slice(start, idx + 1);
+          if (!slice.length) return null;
+          const sum = slice.reduce((acc, v) => acc + v, 0);
+          return sum / slice.length;
+        });
+      }
+
+      function computeRSISeries(prices, period) {
+        const rsi = new Array(prices.length).fill(null);
+        if (prices.length <= period) return rsi;
+        let gains = 0;
+        let losses = 0;
+        for (let i = 1; i <= period; i++) {
+          const diff = prices[i] - prices[i - 1];
+          if (diff >= 0) gains += diff;
+          else losses -= diff;
+        }
+        let avgGain = gains / period;
+        let avgLoss = losses / period;
+        rsi[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+
+        for (let i = period + 1; i < prices.length; i++) {
+          const diff = prices[i] - prices[i - 1];
+          const gain = diff > 0 ? diff : 0;
+          const loss = diff < 0 ? -diff : 0;
+          avgGain = (avgGain * (period - 1) + gain) / period;
+          avgLoss = (avgLoss * (period - 1) + loss) / period;
+          rsi[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+        }
+        return rsi;
+      }
+
+      function computeDrawdownSeries(prices) {
+        let peak = prices[0] || 1;
+        return prices.map((p) => {
+          if (p > peak) peak = p;
+          return peak > 0 ? ((p - peak) / peak) * 100 : 0;
+        });
+      }
+
+      function getETFMetrics(etf) {
+        const prices = etf.prices && etf.prices.length ? etf.prices : [etf.lastPrice];
+        const sma10Series = computeSMASeries(prices, 10);
+        const sma20Series = computeSMASeries(prices, 20);
+        const sma50Series = computeSMASeries(prices, 50);
+        const rsiSeries = computeRSISeries(prices, 14);
+        const ddSeries = computeDrawdownSeries(prices);
+
+        const lastIdx = prices.length - 1;
+        const sma20 = sma20Series[lastIdx] || etf.lastPrice;
+        const disparity20 = sma20 > 0 ? ((etf.lastPrice - sma20) / sma20) * 100 : 0;
+        const rsi14 = rsiSeries[lastIdx] !== null ? rsiSeries[lastIdx] : 50;
+        const periodMdd = Math.min(...ddSeries);
+        const currentDd = ddSeries[lastIdx] || 0;
+        const from52wHigh = etf.high52w > 0 ? ((etf.lastPrice - etf.high52w) / etf.high52w) * 100 : 0;
+        const dayChangePct = etf.prevClose > 0 ? ((etf.lastPrice - etf.prevClose) / etf.prevClose) * 100 : 0;
+
+        const r = state.rules;
+        const isOversold = rsi14 <= r.rsiLow || disparity20 <= r.dispLow;
+        const isOverbought = rsi14 >= r.rsiHigh || disparity20 >= r.dispHigh;
+        const isMddAlert = from52wHigh <= r.mddAlert;
+
+        let signal = { code: 'neutral', label: '중립 관망', cls: 'bg-slate-800 text-slate-300 border-slate-700' };
+        if (isOversold) {
+          signal = { code: 'oversold', label: '과매도 · 분할매수 관심', cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35' };
+        } else if (isOverbought) {
+          signal = { code: 'overbought', label: '과열 · 리밸런싱 점검', cls: 'bg-rose-500/15 text-rose-300 border-rose-500/35' };
+        } else if (isMddAlert) {
+          signal = { code: 'mdd', label: 'MDD 경보 구간', cls: 'bg-amber-500/15 text-amber-300 border-amber-500/35' };
+        }
+
+        const triggers = [];
+        if (rsi14 <= r.rsiLow) triggers.push(`RSI ${rsi14.toFixed(1)} (기준 ${r.rsiLow} 이하)`);
+        if (rsi14 >= r.rsiHigh) triggers.push(`RSI ${rsi14.toFixed(1)} (기준 ${r.rsiHigh} 이상)`);
+        if (disparity20 <= r.dispLow) triggers.push(`MA20 괴리율 ${disparity20.toFixed(1)}% (기준 ${r.dispLow}% 이하)`);
+        if (disparity20 >= r.dispHigh) triggers.push(`MA20 괴리율 +${disparity20.toFixed(1)}% (기준 +${r.dispHigh}% 이상)`);
+        if (isMddAlert) triggers.push(`52주 고점 대비 ${from52wHigh.toFixed(1)}% (경보 ${r.mddAlert}% 이하)`);
+
+        return {
+          sma10Series,
+          sma20Series,
+          sma50Series,
+          rsiSeries,
+          ddSeries,
+          sma20,
+          disparity20,
+          rsi14,
+          periodMdd,
+          currentDd,
+          from52wHigh,
+          dayChangePct,
+          isOversold,
+          isOverbought,
+          isMddAlert,
+          signal,
+          triggers
+        };
+      }
+
+      function computePortfolio() {
+        let totalEquity = 0;
+        let targetSum = 0;
+        const rows = state.etfs.map((etf) => {
+          const h = state.portfolio.holdings[etf.symbol] || { shares: 0, target: 0 };
+          const shares = Math.max(0, Number(h.shares) || 0);
+          const target = Math.max(0, Number(h.target) || 0);
+          const value = shares * etf.lastPrice;
+          totalEquity += value;
+          targetSum += target;
+          return { etf, shares, target, value };
+        });
+
+        const cash = Math.max(0, Number(state.portfolio.cash) || 0);
+        const targetTotal = totalEquity + cash;
+
+        let maxDrift = 0;
+        let maxDriftSymbol = '-';
+
+        const enriched = rows.map((row) => {
+          const currentPct = totalEquity > 0 ? (row.value / totalEquity) * 100 : 0;
+          const driftPct = currentPct - row.target;
+          if (Math.abs(driftPct) > Math.abs(maxDrift)) {
+            maxDrift = driftPct;
+            maxDriftSymbol = row.etf.symbol;
+          }
+          const targetVal = targetTotal * (row.target / 100);
+          const diffVal = targetVal - row.value;
+          const orderShares = row.etf.lastPrice > 0 ? Math.trunc(diffVal / row.etf.lastPrice) : 0;
+          return Object.assign({}, row, {
+            currentPct,
+            driftPct,
+            targetVal,
+            diffVal,
+            orderShares
+          });
+        });
+
+        return { rows: enriched, totalEquity, cash, targetTotal, targetSum, maxDrift, maxDriftSymbol };
+      }
+
+      // ============================================================
+      // 4. FORMATTERS & TOAST
+      // ============================================================
+      function fmtUSD(v) {
+        const sign = v < 0 ? '-' : '';
+        return sign + '$' + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+
+      function fmtUSDCompact(v) {
+        const sign = v < 0 ? '-' : '';
+        return sign + '$' + Math.round(Math.abs(v)).toLocaleString('en-US');
+      }
+
+      function fmtPct(v, showPlus) {
+        const sign = v > 0 && showPlus ? '+' : '';
+        return sign + v.toFixed(2) + '%';
+      }
+
+      function showToast(message, tone) {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+        const toast = document.createElement('div');
+        const toneCls = tone === 'error'
+          ? 'bg-rose-950/95 border-rose-500/40 text-rose-100'
+          : 'bg-slate-900/95 border-sky-500/40 text-sky-100';
+        toast.className = `pointer-events-auto px-4 py-2.5 rounded-xl border shadow-xl text-xs font-medium transition-opacity duration-300 ${toneCls}`;
+        toast.textContent = message;
+        container.appendChild(toast);
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          setTimeout(() => toast.remove(), 300);
+        }, 2600);
+      }
+
+      // ============================================================
+      // 5. CHART INSTANCES
+      // ============================================================
+      const charts = {
+        overviewCompare: null,
+        detailPrice: null,
+        detailSub: null,
+        rebalanceAlloc: null
+      };
+
+      const CHART_DEFAULTS = {
+        gridColor: 'rgba(148, 163, 184, 0.09)',
+        tickColor: '#94a3b8'
+      };
+
+      // ============================================================
+      // 6. RENDERERS
+      // ============================================================
+      function renderAll() {
+        const metricsMap = {};
+        state.etfs.forEach((e) => { metricsMap[e.symbol] = getETFMetrics(e); });
+        const pf = computePortfolio();
+
+        // Update nav alert count
+        const activeAlerts = state.etfs.filter((e) => metricsMap[e.symbol].triggers.length > 0);
+        const navBadge = document.getElementById('nav-alert-badge');
+        if (navBadge) navBadge.textContent = String(activeAlerts.length);
+
+        renderOverview(metricsMap, pf, activeAlerts);
+        renderChartLab(metricsMap);
+        renderRebalancer(pf);
+        renderRulesAndFeed(metricsMap, activeAlerts);
+
+        if (window.lucide) {
+          window.lucide.createIcons();
+        }
+      }
+
+      function renderOverview(metricsMap, pf, activeAlerts) {
+        // KPIs
+        document.getElementById('kpi-total-equity').textContent = fmtUSDCompact(pf.totalEquity);
+        document.getElementById('kpi-total-sub').textContent = `추가 투자금 포함 ${fmtUSDCompact(pf.targetTotal)}`;
+
+        document.getElementById('kpi-signal-count').textContent = `${activeAlerts.length}개 종목`;
+        const oversoldCnt = state.etfs.filter((e) => metricsMap[e.symbol].isOversold).length;
+        const mddCnt = state.etfs.filter((e) => metricsMap[e.symbol].isMddAlert).length;
+        document.getElementById('kpi-signal-sub').textContent = `과매도 ${oversoldCnt} · MDD 경보 ${mddCnt}`;
+
+        const avgRsi = state.etfs.reduce((s, e) => s + metricsMap[e.symbol].rsi14, 0) / (state.etfs.length || 1);
+        document.getElementById('kpi-avg-rsi').textContent = avgRsi.toFixed(1);
+        document.getElementById('kpi-rsi-sub').textContent = avgRsi <= state.rules.rsiLow ? '전반적 과매도 구간' : avgRsi >= state.rules.rsiHigh ? '전반적 과열 구간' : '중립 모멘텀 구간';
+
+        document.getElementById('kpi-max-drift').textContent = `${pf.maxDrift > 0 ? '+' : ''}${pf.maxDrift.toFixed(1)}%p`;
+        document.getElementById('kpi-drift-sub').textContent = `최대 괴리 종목: ${pf.maxDriftSymbol}`;
+
+        // Filtered ETFs
+        const filtered = state.etfs.filter((etf) => {
+          const m = metricsMap[etf.symbol];
+          if (state.overviewFilter === 'core') return etf.group === 'core';
+          if (state.overviewFilter === 'oversold') return m.isOversold;
+          if (state.overviewFilter === 'mdd') return m.isMddAlert;
+          if (state.overviewFilter === 'leveraged') return etf.leverage !== '1x';
+          return true;
+        });
+
+        // Desktop Table
+        const tbody = document.getElementById('overview-table-body');
+        if (!filtered.length) {
+          tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-slate-400 text-sm">선택한 필터 조건에 해당하는 종목이 없습니다.</td></tr>`;
+        } else {
+          tbody.innerHTML = filtered.map((etf) => {
+            const m = metricsMap[etf.symbol];
+            const chgCls = m.dayChangePct >= 0 ? 'text-emerald-400' : 'text-rose-400';
+            const dispCls = m.disparity20 <= state.rules.dispLow ? 'text-emerald-400 font-semibold' : m.disparity20 >= state.rules.dispHigh ? 'text-rose-400 font-semibold' : 'text-slate-200';
+            const rsiCls = m.rsi14 <= state.rules.rsiLow ? 'text-emerald-400 font-semibold' : m.rsi14 >= state.rules.rsiHigh ? 'text-rose-400 font-semibold' : 'text-slate-200';
+            return `
+              <tr data-open-symbol="${etf.symbol}" class="hover:bg-slate-800/40 cursor-pointer transition">
+                <td class="py-3.5 px-4">
+                  <div class="flex items-center gap-2.5">
+                    <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${etf.color}"></span>
+                    <div>
+                      <div class="flex items-center gap-1.5">
+                        <span class="font-bold text-white">${etf.symbol}</span>
+                        <span class="text-[10px] px-1.5 py-0.5 rounded ${etf.group === 'core' ? 'bg-sky-500/15 text-sky-300 border-sky-500/30' : 'bg-slate-800 text-slate-300 border-slate-700'} border">${etf.roleLabel || etf.leverage}</span><span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">${etf.leverage}</span>
+                      </div>
+                      <div class="text-xs text-slate-400 truncate max-w-[200px]">${etf.name}</div>
+                    </div>
+                  </div>
+                </td>
+                <td class="py-3.5 px-4 text-right font-semibold text-white num">${fmtUSD(etf.lastPrice)}</td>
+                <td class="py-3.5 px-4 text-right font-medium num ${chgCls}">${fmtPct(m.dayChangePct, true)}</td>
+                <td class="py-3.5 px-4 text-right num ${dispCls}">${fmtPct(m.disparity20, true)}</td>
+                <td class="py-3.5 px-4 text-right num ${rsiCls}">${m.rsi14.toFixed(1)}</td>
+                <td class="py-3.5 px-4 text-right text-amber-300 num">${fmtPct(m.from52wHigh, false)}</td>
+                <td class="py-3.5 px-4 text-right text-slate-300 num">${fmtPct(m.periodMdd, false)}</td>
+                <td class="py-3.5 px-4 text-center">
+                  <span class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold border ${m.signal.cls}">${m.signal.label}</span>
+                </td>
+              </tr>
+            `;
+          }).join('');
+        }
+
+        // Mobile Cards
+        const mobileWrap = document.getElementById('overview-mobile-cards');
+        if (!filtered.length) {
+          mobileWrap.innerHTML = `<div class="p-6 text-center text-slate-400 text-sm">선택한 필터 조건에 해당하는 종목이 없습니다.</div>`;
+        } else {
+          mobileWrap.innerHTML = filtered.map((etf) => {
+            const m = metricsMap[etf.symbol];
+            const chgCls = m.dayChangePct >= 0 ? 'text-emerald-400' : 'text-rose-400';
+            return `
+              <div data-open-symbol="${etf.symbol}" class="p-4 active:bg-slate-800/60 cursor-pointer space-y-2.5">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full" style="background:${etf.color}"></span>
+                    <span class="font-bold text-white">${etf.symbol}</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">${etf.leverage}</span>
+                  </div>
+                  <div class="text-right">
+                    <span class="font-bold text-white num">${fmtUSD(etf.lastPrice)}</span>
+                    <span class="ml-1.5 text-xs font-medium num ${chgCls}">${fmtPct(m.dayChangePct, true)}</span>
+                  </div>
+                </div>
+                <div class="grid grid-cols-3 gap-2 text-xs bg-slate-900/60 rounded-xl p-2.5">
+                  <div>
+                    <div class="text-slate-400 text-[10px]">MA20 괴리</div>
+                    <div class="font-semibold text-slate-100 num">${fmtPct(m.disparity20, true)}</div>
+                  </div>
+                  <div>
+                    <div class="text-slate-400 text-[10px]">RSI (14)</div>
+                    <div class="font-semibold text-slate-100 num">${m.rsi14.toFixed(1)}</div>
+                  </div>
+                  <div>
+                    <div class="text-slate-400 text-[10px]">52주 고점비</div>
+                    <div class="font-semibold text-amber-300 num">${fmtPct(m.from52wHigh, false)}</div>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-[11px] text-slate-400 truncate max-w-[160px]">${etf.name}</span>
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${m.signal.cls}">${m.signal.label}</span>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+
+        // Bind row/card click to open chart lab
+        document.querySelectorAll('[data-open-symbol]').forEach((el) => {
+          el.addEventListener('click', () => {
+            state.selectedSymbol = el.getAttribute('data-open-symbol');
+            switchTab('charts');
+          });
+        });
+
+        // Overview Briefing
+        const sortedByRsi = [...state.etfs].sort((a, b) => metricsMap[a.symbol].rsi14 - metricsMap[b.symbol].rsi14);
+        const lowestRsiEtf = sortedByRsi[0];
+        const lowestRsiM = metricsMap[lowestRsiEtf.symbol];
+        const deepest52w = [...state.etfs].sort((a, b) => metricsMap[a.symbol].from52wHigh - metricsMap[b.symbol].from52wHigh)[0];
+        const deepestM = metricsMap[deepest52w.symbol];
+
+        document.getElementById('overview-briefing').innerHTML = `
+          <div class="p-3 rounded-xl bg-slate-900/70 border border-slate-800">
+            <div class="text-xs font-semibold text-sky-300 mb-1">1. 단기 과매도 집중</div>
+            <p class="text-xs text-slate-300">가장 낮은 RSI는 <strong class="text-white">${lowestRsiEtf.symbol}</strong> (${lowestRsiM.rsi14.toFixed(1)}, MA20 괴리율 ${fmtPct(lowestRsiM.disparity20, true)})로, 단기 급락 이후 기술적 과매도 구간에 진입해 있습니다.</p>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-900/70 border border-slate-800">
+            <div class="text-xs font-semibold text-amber-300 mb-1">2. 변동성·MDD 리스크</div>
+            <p class="text-xs text-slate-300"><strong class="text-white">${deepest52w.symbol}</strong>(${deepest52w.leverage})는 52주 고점(${fmtUSD(deepest52w.high52w)}) 대비 <strong class="text-rose-300">${fmtPct(deepestM.from52wHigh, false)}</strong> 하락해 레버리지 변동성이 극대화된 상태입니다.</p>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-900/70 border border-slate-800">
+            <div class="text-xs font-semibold text-emerald-300 mb-1">3. 리밸런싱 액션</div>
+            <p class="text-xs text-slate-300">현재 목표 비중 대비 최대 괴리 종목은 <strong class="text-white">${pf.maxDriftSymbol}</strong> (${pf.maxDrift > 0 ? '+' : ''}${pf.maxDrift.toFixed(1)}%p)입니다. 추가 투자금(${fmtUSDCompact(pf.cash)})을 활용한 분할 리밸런싱을 확인해보세요.</p>
+          </div>
+        `;
+
+        // Overview Comparison Chart (normalized to 0% on first date)
+        if (state.activeTab === 'overview') {
+          const ctx = document.getElementById('overview-compare-chart');
+          if (charts.overviewCompare) charts.overviewCompare.destroy();
+          charts.overviewCompare = new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: state.dates.map((d) => d.slice(5)),
+              datasets: state.etfs.map((etf) => {
+                const base = etf.prices[0] || 1;
+                return {
+                  label: etf.symbol,
+                  data: etf.prices.map((p) => Number((((p - base) / base) * 100).toFixed(2))),
+                  borderColor: etf.color,
+                  backgroundColor: etf.color,
+                  borderWidth: 2,
+                  pointRadius: 0,
+                  pointHoverRadius: 4,
+                  tension: 0.2
+                };
+              })
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              interaction: { mode: 'index', intersect: false },
+              plugins: {
+                legend: {
+                  position: 'top',
+                  labels: { color: '#cbd5e1', boxWidth: 10, usePointStyle: true, font: { size: 11 } }
+                },
+                tooltip: {
+                  callbacks: {
+                    label: (c) => `${c.dataset.label}: ${c.parsed.y > 0 ? '+' : ''}${c.parsed.y.toFixed(2)}%`
+                  }
+                }
+              },
+              scales: {
+                x: {
+                  grid: { display: false },
+                  ticks: { color: CHART_DEFAULTS.tickColor, maxTicksLimit: 8, font: { size: 10 } }
+                },
+                y: {
+                  grid: { color: CHART_DEFAULTS.gridColor },
+                  ticks: {
+                    color: CHART_DEFAULTS.tickColor,
+                    font: { size: 10 },
+                    callback: (v) => `${v > 0 ? '+' : ''}${v}%`
+                  }
+                }
+              }
+            }
+          });
+        }
+      }
+
+      function renderChartLab(metricsMap) {
+        // Ticker Selector Buttons
+        const selector = document.getElementById('chart-ticker-selector');
+        selector.innerHTML = state.etfs.map((etf) => `
+          <button type="button" data-select-ticker="${etf.symbol}" data-active="${etf.symbol === state.selectedSymbol}" class="pill-btn px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 bg-slate-800/80 text-slate-300 transition flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full" style="background:${etf.color}"></span>
+            <span>${etf.symbol}</span>
+          </button>
+        `).join('');
+
+        selector.querySelectorAll('[data-select-ticker]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            state.selectedSymbol = btn.getAttribute('data-select-ticker');
+            renderChartLab(metricsMap);
+          });
+        });
+
+        const etf = state.etfs.find((e) => e.symbol === state.selectedSymbol) || state.etfs[0];
+        const m = metricsMap[etf.symbol];
+
+        // Stats Strip
+        const statsEl = document.getElementById('chart-ticker-stats');
+        const chgCls = m.dayChangePct >= 0 ? 'text-emerald-400' : 'text-rose-400';
+        statsEl.innerHTML = [
+          { label: '현재가', value: fmtUSD(etf.lastPrice), sub: fmtPct(m.dayChangePct, true), subCls: chgCls },
+          { label: 'MA20 괴리율', value: fmtPct(m.disparity20, true), sub: `SMA20 ${fmtUSD(m.sma20)}`, subCls: 'text-slate-400' },
+          { label: 'RSI (14)', value: m.rsi14.toFixed(1), sub: m.rsi14 <= state.rules.rsiLow ? '과매도 구간' : m.rsi14 >= state.rules.rsiHigh ? '과열 구간' : '중립 구간', subCls: 'text-slate-400' },
+          { label: '52주 고점 대비', value: fmtPct(m.from52wHigh, false), sub: `고점 ${fmtUSD(etf.high52w)}`, subCls: 'text-amber-300' },
+          { label: '기간 MDD', value: fmtPct(m.periodMdd, false), sub: `현재 낙폭 ${fmtPct(m.currentDd, false)}`, subCls: 'text-slate-400' },
+          { label: '당일 거래량', value: (etf.volume / 1e6).toFixed(2) + 'M', sub: `저가 ${fmtUSD(etf.dayLow)} · 고가 ${fmtUSD(etf.dayHigh)}`, subCls: 'text-slate-400' }
+        ].map((item) => `
+          <div class="glass-card rounded-xl p-3">
+            <div class="text-[11px] text-slate-400">${item.label}</div>
+            <div class="text-base font-bold text-white num mt-0.5">${item.value}</div>
+            <div class="text-[11px] num mt-0.5 ${item.subCls}">${item.sub}</div>
+          </div>
+        `).join('');
+
+        document.getElementById('main-chart-title').textContent = `${etf.symbol} 종가 & 이동평균선`;
+        document.getElementById('main-chart-subtitle').textContent = `${etf.name} (${etf.exchange} · ${etf.leverage})`;
+        document.getElementById('main-chart-signal-badge').innerHTML = `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${m.signal.cls}">${m.signal.label}</span>`;
+
+        // Briefing Card
+        const rsiComment = m.rsi14 <= state.rules.rsiLow
+          ? `RSI가 ${m.rsi14.toFixed(1)}로 과매도 기준(${state.rules.rsiLow}) 아래에 위치해 단기 반등 또는 분할 매수 검토 구간입니다.`
+          : m.rsi14 >= state.rules.rsiHigh
+            ? `RSI가 ${m.rsi14.toFixed(1)}로 과열 기준(${state.rules.rsiHigh})을 넘어 일부 차익실현 점검이 필요합니다.`
+            : `RSI가 ${m.rsi14.toFixed(1)}로 중립 대역에 머물러 있습니다.`;
+
+        const dispComment = m.disparity20 <= state.rules.dispLow
+          ? `20-포인트 이동평균(${fmtUSD(m.sma20)}) 대비 ${fmtPct(m.disparity20, true)}로 단기 이격이 크게 벌어졌습니다.`
+          : m.disparity20 >= state.rules.dispHigh
+            ? `20-포인트 이동평균 대비 +${m.disparity20.toFixed(2)}% 상회해 단기 과열 이격이 발생했습니다.`
+            : `20-포인트 이동평균(${fmtUSD(m.sma20)}) 대비 ${fmtPct(m.disparity20, true)}로 정상 이격 범위입니다.`;
+
+        document.getElementById('detail-briefing').innerHTML = `
+          <div class="p-3 rounded-xl bg-slate-900/70 border border-slate-800">
+            <div class="text-xs font-semibold text-sky-300 mb-1">모멘텀 (RSI)</div>
+            <p class="text-xs text-slate-300">${rsiComment}</p>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-900/70 border border-slate-800">
+            <div class="text-xs font-semibold text-emerald-300 mb-1">이평 괴리율 (MA20)</div>
+            <p class="text-xs text-slate-300">${dispComment}</p>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-900/70 border border-slate-800">
+            <div class="text-xs font-semibold text-amber-300 mb-1">고점 대비 낙폭 (52W &amp; MDD)</div>
+            <p class="text-xs text-slate-300">52주 최고가(${fmtUSD(etf.high52w)}) 대비 ${fmtPct(m.from52wHigh, false)}, 52주 최저가(${fmtUSD(etf.low52w)}) 대비 +${(((etf.lastPrice - etf.low52w) / (etf.low52w || 1)) * 100).toFixed(1)}% 위치입니다.</p>
+          </div>
+        `;
+
+        if (state.activeTab !== 'charts') return;
+
+        // Slice by range
+        const totalLen = etf.prices.length;
+        const sliceCount = state.chartRange === 'all' ? totalLen : Math.min(totalLen, Number(state.chartRange) || totalLen);
+        const startIdx = totalLen - sliceCount;
+        const labels = state.dates.slice(startIdx).map((d) => d.slice(5));
+        const priceSlice = etf.prices.slice(startIdx);
+
+        // Main Price Chart
+        const datasets = [
+          {
+            label: `${etf.symbol} 종가`,
+            data: priceSlice,
+            borderColor: etf.color,
+            backgroundColor: etf.color + '1f',
+            fill: true,
+            borderWidth: 2.2,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            tension: 0.15
+          }
+        ];
+        if (state.overlays.sma10) {
+          datasets.push({
+            label: 'SMA 10',
+            data: m.sma10Series.slice(startIdx),
+            borderColor: '#fbbf24',
+            borderWidth: 1.5,
+            borderDash: [4, 3],
+            pointRadius: 0,
+            tension: 0.2
+          });
+        }
+        if (state.overlays.sma20) {
+          datasets.push({
+            label: 'SMA 20',
+            data: m.sma20Series.slice(startIdx),
+            borderColor: '#38bdf8',
+            borderWidth: 1.5,
+            pointRadius: 0,
+            tension: 0.2
+          });
+        }
+        if (state.overlays.sma50) {
+          datasets.push({
+            label: 'SMA 50',
+            data: m.sma50Series.slice(startIdx),
+            borderColor: '#c084fc',
+            borderWidth: 1.5,
+            pointRadius: 0,
+            tension: 0.2
+          });
+        }
+
+        const priceCtx = document.getElementById('detail-price-chart');
+        if (charts.detailPrice) charts.detailPrice.destroy();
+        charts.detailPrice = new Chart(priceCtx, {
+          type: 'line',
+          data: { labels, datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { position: 'top', labels: { color: '#cbd5e1', boxWidth: 10, usePointStyle: true, font: { size: 11 } } },
+              tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${fmtUSD(c.parsed.y)}` } }
+            },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: CHART_DEFAULTS.tickColor, maxTicksLimit: 8, font: { size: 10 } } },
+              y: { grid: { color: CHART_DEFAULTS.gridColor }, ticks: { color: CHART_DEFAULTS.tickColor, font: { size: 10 }, callback: (v) => '$' + v } }
+            }
+          }
+        });
+
+        // Sub Chart (RSI or Drawdown)
+        const subCtx = document.getElementById('detail-sub-chart');
+        if (charts.detailSub) charts.detailSub.destroy();
+
+        if (state.subChartMode === 'rsi') {
+          document.getElementById('sub-chart-title').textContent = `${etf.symbol} 14-기간 RSI 추이 (과매도 ${state.rules.rsiLow} / 과열 ${state.rules.rsiHigh})`;
+          const rsiSlice = m.rsiSeries.slice(startIdx);
+          charts.detailSub = new Chart(subCtx, {
+            type: 'line',
+            data: {
+              labels,
+              datasets: [
+                {
+                  label: 'RSI (14)',
+                  data: rsiSlice,
+                  borderColor: '#38bdf8',
+                  borderWidth: 2,
+                  pointRadius: 0,
+                  tension: 0.2
+                },
+                {
+                  label: `과열 (${state.rules.rsiHigh})`,
+                  data: labels.map(() => state.rules.rsiHigh),
+                  borderColor: 'rgba(244, 63, 94, 0.55)',
+                  borderWidth: 1,
+                  borderDash: [5, 5],
+                  pointRadius: 0
+                },
+                {
+                  label: `과매도 (${state.rules.rsiLow})`,
+                  data: labels.map(() => state.rules.rsiLow),
+                  borderColor: 'rgba(16, 185, 129, 0.6)',
+                  borderWidth: 1,
+                  borderDash: [5, 5],
+                  pointRadius: 0
+                }
+              ]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              interaction: { mode: 'index', intersect: false },
+              plugins: {
+                legend: { position: 'top', labels: { color: '#cbd5e1', boxWidth: 10, font: { size: 10 } } }
+              },
+              scales: {
+                x: { grid: { display: false }, ticks: { color: CHART_DEFAULTS.tickColor, maxTicksLimit: 8, font: { size: 10 } } },
+                y: { min: 0, max: 100, grid: { color: CHART_DEFAULTS.gridColor }, ticks: { color: CHART_DEFAULTS.tickColor, font: { size: 10 } } }
+              }
+            }
+          });
+        } else {
+          document.getElementById('sub-chart-title').textContent = `${etf.symbol} 기간 내 고점 대비 낙폭 (Drawdown %)`;
+          const ddSlice = m.ddSeries.slice(startIdx);
+          charts.detailSub = new Chart(subCtx, {
+            type: 'line',
+            data: {
+              labels,
+              datasets: [
+                {
+                  label: 'Drawdown (%)',
+                  data: ddSlice.map((v) => Number(v.toFixed(2))),
+                  borderColor: '#f43f5e',
+                  backgroundColor: 'rgba(244, 63, 94, 0.16)',
+                  fill: true,
+                  borderWidth: 1.8,
+                  pointRadius: 0,
+                  tension: 0.15
+                }
+              ]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              interaction: { mode: 'index', intersect: false },
+              plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: (c) => `낙폭: ${c.parsed.y.toFixed(2)}%` } }
+              },
+              scales: {
+                x: { grid: { display: false }, ticks: { color: CHART_DEFAULTS.tickColor, maxTicksLimit: 8, font: { size: 10 } } },
+                y: { max: 0, grid: { color: CHART_DEFAULTS.gridColor }, ticks: { color: CHART_DEFAULTS.tickColor, font: { size: 10 }, callback: (v) => v + '%' } }
+              }
+            }
+          });
+        }
+      }
+
+      function renderRebalancer(pf) {
+        const cashInput = document.getElementById('input-extra-cash');
+        if (document.activeElement !== cashInput) {
+          cashInput.value = pf.cash;
+        }
+
+        const sumEl = document.getElementById('rebalance-target-sum');
+        const warnBox = document.getElementById('target-sum-warning');
+        const isSumOk = Math.abs(pf.targetSum - 100) < 0.05;
+        sumEl.textContent = `${pf.targetSum.toFixed(1)}%`;
+        sumEl.className = `text-sm font-bold num ${isSumOk ? 'text-emerald-400' : 'text-amber-400'}`;
+
+        if (!isSumOk) {
+          warnBox.classList.remove('hidden');
+          document.getElementById('target-sum-warning-text').textContent = `목표 비중 합계가 ${pf.targetSum.toFixed(1)}%입니다. 정확한 리밸런싱을 위해 합계를 100%로 맞춰주세요.`;
+        } else {
+          warnBox.classList.add('hidden');
+        }
+
+        const tbody = document.getElementById('rebalance-table-body');
+        tbody.innerHTML = pf.rows.map((row) => {
+          const driftCls = Math.abs(row.driftPct) >= 5 ? (row.driftPct > 0 ? 'text-rose-400 font-semibold' : 'text-emerald-400 font-semibold') : 'text-slate-300';
+          let orderBadge = `<span class="px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[11px]">유지</span>`;
+          if (row.orderShares > 0) {
+            orderBadge = `<span class="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-semibold text-[11px] num">매수 +${row.orderShares}주</span>`;
+          } else if (row.orderShares < 0) {
+            orderBadge = `<span class="px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-300 border border-rose-500/30 font-semibold text-[11px] num">매도 ${row.orderShares}주</span>`;
+          }
+
+          return `
+            <tr class="hover:bg-slate-800/30">
+              <td class="py-3 px-3 sm:px-4">
+                <div class="flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full shrink-0" style="background:${row.etf.color}"></span>
+                  <div>
+                    <div class="font-bold text-white">${row.etf.symbol}</div>
+                    <div class="text-[11px] text-slate-400 num">${fmtUSD(row.etf.lastPrice)}</div>
+                  </div>
+                </div>
+              </td>
+              <td class="py-3 px-3 text-right">
+                <input type="number" min="0" step="1" data-holding-shares="${row.etf.symbol}" value="${row.shares}" class="w-20 px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-right text-white num text-xs focus:outline-none focus:border-sky-400" />
+              </td>
+              <td class="py-3 px-3 text-right num">
+                <div class="font-semibold text-white">${fmtUSDCompact(row.value)}</div>
+                <div class="text-[11px] text-slate-400">${row.currentPct.toFixed(1)}%</div>
+              </td>
+              <td class="py-3 px-3 text-right">
+                <input type="number" min="0" max="100" step="1" data-holding-target="${row.etf.symbol}" value="${row.target}" class="w-16 px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-right text-sky-300 font-semibold num text-xs focus:outline-none focus:border-sky-400" />
+              </td>
+              <td class="py-3 px-3 text-right num ${driftCls}">
+                ${row.driftPct > 0 ? '+' : ''}${row.driftPct.toFixed(1)}%p
+              </td>
+              <td class="py-3 px-3 sm:px-4 text-right">
+                <div>${orderBadge}</div>
+                <div class="text-[11px] text-slate-400 num mt-0.5">${row.diffVal >= 0 ? '+' : ''}${fmtUSDCompact(row.diffVal)}</div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+        // Bind input listeners cleanly
+        tbody.querySelectorAll('[data-holding-shares]').forEach((input) => {
+          input.addEventListener('change', (e) => {
+            const sym = e.target.getAttribute('data-holding-shares');
+            state.portfolio.holdings[sym].shares = Math.max(0, Number(e.target.value) || 0);
+            saveState();
+            renderAll();
+          });
+        });
+        tbody.querySelectorAll('[data-holding-target]').forEach((input) => {
+          input.addEventListener('change', (e) => {
+            const sym = e.target.getAttribute('data-holding-target');
+            state.portfolio.holdings[sym].target = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+            saveState();
+            renderAll();
+          });
+        });
+
+        // Summary Footer
+        const totalBuy = pf.rows.filter((r) => r.orderShares > 0).reduce((s, r) => s + r.orderShares * r.etf.lastPrice, 0);
+        const totalSell = pf.rows.filter((r) => r.orderShares < 0).reduce((s, r) => s + Math.abs(r.orderShares) * r.etf.lastPrice, 0);
+        const leftover = pf.cash + totalSell - totalBuy;
+
+        document.getElementById('rebalance-summary-footer').innerHTML = `
+          <div class="flex flex-wrap items-center gap-4">
+            <span class="text-slate-400">현재 평가액 <strong class="text-white num">${fmtUSDCompact(pf.totalEquity)}</strong></span>
+            <span class="text-slate-400">총 매수 예정 <strong class="text-emerald-400 num">${fmtUSDCompact(totalBuy)}</strong></span>
+            <span class="text-slate-400">총 매도 예정 <strong class="text-rose-400 num">${fmtUSDCompact(totalSell)}</strong></span>
+          </div>
+          <div class="text-slate-400">예상 잔여 현금 <strong class="text-sky-300 num">${fmtUSDCompact(leftover)}</strong></div>
+        `;
+
+        // Action Chips
+        const actions = pf.rows.filter((r) => r.orderShares !== 0);
+        document.getElementById('rebalance-action-chips').innerHTML = actions.length
+          ? actions.map((r) => `
+              <div class="flex items-center justify-between text-xs">
+                <span class="text-slate-300 font-medium">${r.etf.symbol}</span>
+                <span class="${r.orderShares > 0 ? 'text-emerald-400' : 'text-rose-400'} font-semibold num">
+                  ${r.orderShares > 0 ? `매수 ${r.orderShares}주 (${fmtUSDCompact(r.orderShares * r.etf.lastPrice)})` : `매도 ${Math.abs(r.orderShares)}주 (${fmtUSDCompact(Math.abs(r.orderShares) * r.etf.lastPrice)})`}
+                </span>
+              </div>
+            `).join('')
+          : `<div class="text-slate-400 text-xs">현재 정수 주 기준 추가 매매가 필요하지 않습니다.</div>`;
+
+        // Allocation Bar Chart
+        if (state.activeTab === 'rebalance') {
+          const ctx = document.getElementById('rebalance-alloc-chart');
+          if (charts.rebalanceAlloc) charts.rebalanceAlloc.destroy();
+          charts.rebalanceAlloc = new Chart(ctx, {
+            type: 'bar',
+            data: {
+              labels: pf.rows.map((r) => r.etf.symbol),
+              datasets: [
+                {
+                  label: '현재 비중 (%)',
+                  data: pf.rows.map((r) => Number(r.currentPct.toFixed(1))),
+                  backgroundColor: 'rgba(148, 163, 184, 0.5)',
+                  borderRadius: 6
+                },
+                {
+                  label: '목표 비중 (%)',
+                  data: pf.rows.map((r) => r.target),
+                  backgroundColor: 'rgba(56, 189, 248, 0.85)',
+                  borderRadius: 6
+                }
+              ]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { position: 'top', labels: { color: '#cbd5e1', boxWidth: 10, font: { size: 11 } } }
+              },
+              scales: {
+                x: { grid: { display: false }, ticks: { color: '#e2e8f0', font: { size: 11, weight: '600' } } },
+                y: { grid: { color: CHART_DEFAULTS.gridColor }, ticks: { color: CHART_DEFAULTS.tickColor, callback: (v) => v + '%' } }
+              }
+            }
+          });
+        }
+      }
+
+      function renderRulesAndFeed(metricsMap, activeAlerts) {
+        // Sync slider labels
+        document.getElementById('rule-rsi-low').value = state.rules.rsiLow;
+        document.getElementById('val-rsi-low').textContent = `${state.rules.rsiLow} 이하`;
+
+        document.getElementById('rule-rsi-high').value = state.rules.rsiHigh;
+        document.getElementById('val-rsi-high').textContent = `${state.rules.rsiHigh} 이상`;
+
+        document.getElementById('rule-disp-low').value = state.rules.dispLow;
+        document.getElementById('val-disp-low').textContent = `${state.rules.dispLow}% 이하`;
+
+        document.getElementById('rule-disp-high').value = state.rules.dispHigh;
+        document.getElementById('val-disp-high').textContent = `+${state.rules.dispHigh}% 이상`;
+
+        document.getElementById('rule-mdd-alert').value = state.rules.mddAlert;
+        document.getElementById('val-mdd-alert').textContent = `${state.rules.mddAlert}% 이하`;
+
+        document.getElementById('feed-alert-count').textContent = `${activeAlerts.length}건`;
+
+        const list = document.getElementById('active-alerts-list');
+        if (!activeAlerts.length) {
+          list.innerHTML = `<div class="p-6 rounded-xl bg-slate-900/60 border border-slate-800 text-center text-xs text-slate-400">현재 임계값 조건에 도달한 알림이 없습니다.</div>`;
+          return;
+        }
+
+        list.innerHTML = activeAlerts.map((etf) => {
+          const m = metricsMap[etf.symbol];
+          return `
+            <div class="p-3.5 rounded-xl bg-slate-900/75 border border-slate-800 space-y-2">
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full" style="background:${etf.color}"></span>
+                  <span class="font-bold text-white text-sm">${etf.symbol}</span>
+                  <span class="text-xs text-slate-400 num">${fmtUSD(etf.lastPrice)}</span>
+                </div>
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${m.signal.cls}">${m.signal.label}</span>
+              </div>
+              <ul class="space-y-1 text-xs text-slate-300 pl-4 list-disc">
+                ${m.triggers.map((t) => `<li>${t}</li>`).join('')}
+              </ul>
+            </div>
+          `;
+        }).join('');
+      }
+
+      // ============================================================
+      // 7. NAVIGATION & EVENT HANDLERS
+      // ============================================================
+      function switchTab(tabName) {
+        state.activeTab = tabName;
+        document.querySelectorAll('[role="tab"]').forEach((btn) => {
+          btn.setAttribute('aria-selected', btn.getAttribute('data-tab') === tabName ? 'true' : 'false');
+        });
+        ['overview', 'charts', 'rebalance', 'rules'].forEach((id) => {
+          const sec = document.getElementById(`tab-${id}`);
+          if (sec) sec.classList.toggle('hidden', id !== tabName);
+        });
+        renderAll();
+      }
+
+      function bindEvents() {
+        // Tabs
+        document.querySelectorAll('[role="tab"]').forEach((btn) => {
+          btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
+        });
+
+        document.getElementById('btn-goto-rules').addEventListener('click', () => switchTab('rules'));
+        document.getElementById('btn-open-rebalancer').addEventListener('click', () => switchTab('rebalance'));
+
+        // Overview filters
+        document.querySelectorAll('#overview-filters [data-filter]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            state.overviewFilter = btn.getAttribute('data-filter');
+            document.querySelectorAll('#overview-filters [data-filter]').forEach((b) => {
+              b.setAttribute('data-active', b === btn ? 'true' : 'false');
+            });
+            renderAll();
+          });
+        });
+
+        // Chart range
+        document.querySelectorAll('#chart-range-selector [data-range]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            state.chartRange = btn.getAttribute('data-range');
+            document.querySelectorAll('#chart-range-selector [data-range]').forEach((b) => {
+              b.setAttribute('data-active', b === btn ? 'true' : 'false');
+            });
+            renderAll();
+          });
+        });
+
+        // Sub chart mode
+        document.querySelectorAll('#sub-chart-mode [data-mode]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            state.subChartMode = btn.getAttribute('data-mode');
+            document.querySelectorAll('#sub-chart-mode [data-mode]').forEach((b) => {
+              b.setAttribute('data-active', b === btn ? 'true' : 'false');
+            });
+            renderAll();
+          });
+        });
+
+        // SMA toggles
+        ['sma10', 'sma20', 'sma50'].forEach((key) => {
+          document.getElementById(`toggle-${key}`).addEventListener('change', (e) => {
+            state.overlays[key] = e.target.checked;
+            renderAll();
+          });
+        });
+
+        // Extra cash input
+        document.getElementById('input-extra-cash').addEventListener('input', (e) => {
+          state.portfolio.cash = Math.max(0, Number(e.target.value) || 0);
+          saveState();
+          renderAll();
+        });
+
+        // Presets
+        const PRESETS = {
+          core:   { QQQ: 20, SCHD: 20, JEPI: 15, JEPQ: 15, SMH: 10, QLD: 10, USD: 5, SOXL: 5 },
+          income: { QQQ: 15, SCHD: 30, JEPI: 25, JEPQ: 20, SMH: 5,  QLD: 5,  USD: 0, SOXL: 0 },
+          equal:  { QQQ: 12.5, SCHD: 12.5, JEPI: 12.5, JEPQ: 12.5, SMH: 12.5, QLD: 12.5, USD: 12.5, SOXL: 12.5 }
+        };
+        document.querySelectorAll('.preset-btn').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const p = PRESETS[btn.getAttribute('data-preset')];
+            if (!p) return;
+            Object.keys(p).forEach((sym) => {
+              if (state.portfolio.holdings[sym]) state.portfolio.holdings[sym].target = p[sym];
+            });
+            saveState();
+            renderAll();
+            showToast('목표 비중 프리셋을 적용했습니다.');
+          });
+        });
+
+        document.getElementById('btn-normalize-targets').addEventListener('click', () => {
+          const syms = Object.keys(state.portfolio.holdings);
+          const total = syms.reduce((s, k) => s + (Number(state.portfolio.holdings[k].target) || 0), 0);
+          if (total <= 0) {
+            const even = Math.round(100 / syms.length);
+            syms.forEach((k) => { state.portfolio.holdings[k].target = even; });
+          } else {
+            let acc = 0;
+            syms.forEach((k, idx) => {
+              if (idx === syms.length - 1) {
+                state.portfolio.holdings[k].target = Math.max(0, Number((100 - acc).toFixed(1)));
+              } else {
+                const scaled = Number(((state.portfolio.holdings[k].target / total) * 100).toFixed(1));
+                state.portfolio.holdings[k].target = scaled;
+                acc += scaled;
+              }
+            });
+          }
+          saveState();
+          renderAll();
+          showToast('목표 비중 합계를 100%로 정규화했습니다.');
+        });
+
+        document.getElementById('btn-reset-portfolio').addEventListener('click', () => {
+          state.portfolio = JSON.parse(JSON.stringify(DEFAULT_PORTFOLIO));
+          saveState();
+          renderAll();
+          showToast('샘플 포트폴리오로 복원했습니다.');
+        });
+
+        // Rule sliders
+        const ruleBindings = [
+          ['rule-rsi-low', 'rsiLow'],
+          ['rule-rsi-high', 'rsiHigh'],
+          ['rule-disp-low', 'dispLow'],
+          ['rule-disp-high', 'dispHigh'],
+          ['rule-mdd-alert', 'mddAlert']
+        ];
+        ruleBindings.forEach(([id, key]) => {
+          document.getElementById(id).addEventListener('input', (e) => {
+            state.rules[key] = Number(e.target.value);
+            saveState();
+            renderAll();
+          });
+        });
+
+        document.getElementById('btn-reset-rules').addEventListener('click', () => {
+          state.rules = Object.assign({}, DEFAULT_RULES);
+          saveState();
+          renderAll();
+          showToast('시그널 규칙을 기본값으로 복원했습니다.');
+        });
+
+        // Export JSON
+        document.getElementById('btn-export-json').addEventListener('click', () => {
+          const payload = JSON.stringify({
+            exportedAt: new Date().toISOString(),
+            rules: state.rules,
+            portfolio: state.portfolio
+          }, null, 2);
+          copyTextWithFallback(payload, '현재 포트폴리오·규칙 설정을 클립보드에 복사했습니다.');
+        });
+
+        // Copy sample import JSON
+        document.getElementById('btn-copy-schema').addEventListener('click', () => {
+          const sample = JSON.stringify({
+            updatedAt: "2026-11-20",
+            etfs: state.etfs.map((e) => ({
+              symbol: e.symbol,
+              lastPrice: e.lastPrice,
+              prevClose: e.prevClose,
+              high52w: e.high52w,
+              low52w: e.low52w
+            }))
+          }, null, 2);
+          document.getElementById('json-import-input').value = sample;
+          copyTextWithFallback(sample, '샘플 JSON을 입력창에 채우고 클립보드에 복사했습니다.');
+        });
+
+        // Manual JSON apply button
+        document.getElementById('btn-apply-json').addEventListener('click', () => {
+          const raw = document.getElementById('json-import-input').value.trim();
+          if (!raw) {
+            showToast('먼저 JSON 데이터를 입력해주세요.', 'error');
+            return;
+          }
+          try {
+            const parsed = JSON.parse(raw);
+            const count = applyExternalPayload(parsed, '사용자 JSON 반영');
+            if (!count) {
+              showToast('유효한 ETF 시세 항목을 찾지 못했습니다.', 'error');
+              return;
+            }
+            showToast(`${count}개 ETF 시세를 성공적으로 업데이트했습니다.`);
+          } catch (err) {
+            showToast('JSON 형식이 올바르지 않습니다. 포맷을 확인해주세요.', 'error');
+          }
+        });
+
+        // Header remote sync button
+        document.getElementById('btn-sync-remote').addEventListener('click', () => {
+          syncFromGitHubPages(true);
+        });
+      }
+
+      const EXTRA_COLORS = ['#22d3ee', '#e879f9', '#fb7185', '#4ade80', '#facc15'];
+
+      function applyExternalPayload(parsed, sourceLabel) {
+        if (!parsed || !Array.isArray(parsed.etfs)) {
+          throw new Error('etfs 배열이 필요합니다.');
+        }
+
+        if (Array.isArray(parsed.dates) && parsed.dates.length >= 15) {
+          state.dates = parsed.dates.map(String);
+        }
+
+        let updatedCount = 0;
+        parsed.etfs.forEach((item, idx) => {
+          const sym = String(item.symbol || '').trim().toUpperCase();
+          const lastPrice = Number(item.lastPrice);
+          if (!sym || !Number.isFinite(lastPrice) || lastPrice <= 0) return;
+
+          let target = state.etfs.find((e) => e.symbol === sym);
+          if (!target) {
+            const grp = item.group === 'core' ? 'core' : 'satellite';
+            target = {
+              symbol: sym,
+              name: item.name || `${sym} ETF`,
+              group: grp,
+              roleLabel: grp === 'core' ? '코어 · 추가' : '위성 · 추가',
+              leverage: item.leverage || '1x',
+              exchange: item.exchange || 'US',
+              color: EXTRA_COLORS[idx % EXTRA_COLORS.length],
+              lastPrice,
+              prevClose: Number(item.prevClose) > 0 ? Number(item.prevClose) : lastPrice,
+              open: lastPrice,
+              dayHigh: lastPrice,
+              dayLow: lastPrice,
+              high52w: Number(item.high52w) > 0 ? Number(item.high52w) : lastPrice,
+              low52w: Number(item.low52w) > 0 ? Number(item.low52w) : lastPrice,
+              volume: Number(item.volume) || 0,
+              prices: Array.isArray(item.prices) && item.prices.length >= 15
+                ? item.prices.map(Number)
+                : state.dates.map(() => lastPrice)
+            };
+            state.etfs.push(target);
+            if (!state.portfolio.holdings[sym]) {
+              state.portfolio.holdings[sym] = { shares: 0, target: 0 };
+            }
+          } else {
+            target.lastPrice = lastPrice;
+            if (Number.isFinite(Number(item.prevClose)) && Number(item.prevClose) > 0) {
+              target.prevClose = Number(item.prevClose);
+            }
+            if (Number.isFinite(Number(item.high52w)) && Number(item.high52w) > 0) {
+              target.high52w = Number(item.high52w);
+            }
+            if (Number.isFinite(Number(item.low52w)) && Number(item.low52w) > 0) {
+              target.low52w = Number(item.low52w);
+            }
+            if (Number.isFinite(Number(item.volume)) && Number(item.volume) >= 0) {
+              target.volume = Number(item.volume);
+            }
+            if (Array.isArray(item.prices) && item.prices.length >= 15) {
+              target.prices = item.prices.map(Number);
+            } else {
+              target.prices[target.prices.length - 1] = target.lastPrice;
+            }
+          }
+          updatedCount++;
+        });
+
+        if (updatedCount > 0) {
+          const dateTag = parsed.updatedAt ? ` · ${parsed.updatedAt}` : '';
+          document.getElementById('data-timestamp').textContent = `${sourceLabel}${dateTag}`;
+          renderAll();
+        }
+        return updatedCount;
+      }
+
+      async function syncFromGitHubPages(isManual) {
+        const isHttps = window.location.protocol === 'https:';
+        const btnLabel = document.getElementById('sync-btn-label');
+
+        if (!isHttps) {
+          if (isManual) {
+            showToast('GitHub Pages(HTTPS)에 index.html로 올리면 data/etf_signals.json을 자동 불러옵니다. 지금은 알림 규칙 탭에서 JSON을 붙여넣어 테스트하세요.');
+          }
+          return;
+        }
+
+        if (btnLabel) btnLabel.textContent = '불러오는 중...';
+        try {
+          const res = await fetch(`./data/etf_signals.json?t=${Date.now()}`, { cache: 'no-store' });
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
+          }
+          const parsed = await res.json();
+          const count = applyExternalPayload(parsed, 'GitHub 자동 연동');
+          if (count > 0 && isManual) {
+            showToast(`data/etf_signals.json에서 ${count}개 종목 최신 시세를 반영했습니다.`);
+          }
+        } catch (err) {
+          if (isManual) {
+            showToast('data/etf_signals.json을 찾지 못해 내장 데이터를 유지합니다. Actions 실행 여부를 확인하세요.', 'error');
+          }
+        } finally {
+          if (btnLabel) btnLabel.textContent = '시세 새로고침';
+        }
+      }
+
+      function copyTextWithFallback(text, successMsg) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(() => {
+            showToast(successMsg);
+          }).catch(() => fallbackCopy(text, successMsg));
+        } else {
+          fallbackCopy(text, successMsg);
+        }
+      }
+
+      function fallbackCopy(text, successMsg) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand('copy');
+          showToast(successMsg);
+        } catch (e) {
+          showToast('클립보드 복사를 지원하지 않는 환경입니다.', 'error');
+        }
+        document.body.removeChild(ta);
+      }
+
+      // ============================================================
+      // 8. INIT
+      // ============================================================
+      loadSavedState();
+      bindEvents();
+      renderAll();
+      syncFromGitHubPages(false);
+    })();
+  </script>
+</body>
+</html>
